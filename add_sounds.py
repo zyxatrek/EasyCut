@@ -5,19 +5,14 @@ import subprocess
 from typing import Optional
 import edge_tts
 from pydub import AudioSegment
-
-@dataclass
-class AudioConfig:
-    """音频处理配置类"""
-    voice_name: str = "en-US-JennyNeural"
-    voice_rate: str = "+0%"
-    volume: float = 1.0
-    output_format: str = "mp3"
+import json
+from config import AudioConfig, SubtitleConfig
 
 class AudioProcessor:
     """音频处理器类"""
-    def __init__(self, config: Optional[AudioConfig] = None):
-        self.config = config or AudioConfig()
+    def __init__(self):
+        self.audio_config = AudioConfig()
+        self.subtitle_config = SubtitleConfig()
         
     async def generate_voice(self, text: str, output_path: str) -> str:
         """生成语音文件
@@ -32,12 +27,12 @@ class AudioProcessor:
         try:
             communicate = edge_tts.Communicate(
                 text,
-                self.config.voice_name,
-                rate=self.config.voice_rate
+                self.audio_config.voice_name,
+                rate=self.audio_config.voice_rate
             )
             await communicate.save(output_path)
             
-            if self.config.volume != 1.0:
+            if self.audio_config.volume != 1.0:
                 self._adjust_volume(output_path)
                 
             return output_path
@@ -52,8 +47,8 @@ class AudioProcessor:
             audio_path: 音频文件路径
         """
         audio = AudioSegment.from_file(audio_path)
-        audio = audio + (20 * self.config.volume)
-        audio.export(audio_path, format=self.config.output_format)
+        audio = audio + (20 * self.audio_config.volume)
+        audio.export(audio_path, format=self.audio_config.output_format)
 
     def merge_audio_video(self, video_path: str, audio_path: str, output_path: str) -> str:
         """合并音频和视频
@@ -84,6 +79,63 @@ class AudioProcessor:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"合并音视频失败: {e.stderr.decode()}")
 
+    async def generate_voice_with_timing(self, text: str, output_path: str) -> tuple[str, list]:
+        """生成语音文件并返回时间轴信息"""
+        communicate = edge_tts.Communicate(text, self.audio_config.voice_name, rate=self.audio_config.voice_rate)
+        
+        # 先保存音频
+        await communicate.save(output_path)
+        
+        # 创建新的通信实例来获取时间轴信息
+        communicate = edge_tts.Communicate(text, self.audio_config.voice_name, rate=self.audio_config.voice_rate)
+        
+        # 收集时间轴信息
+        timings = []
+        async for event in communicate.stream():
+            if event["type"] == "WordBoundary":
+                timings.append({
+                    "word": event["text"],
+                    "start": event["offset"] / 10000000,  # 转换为秒
+                    "end": (event["offset"] + event["duration"]) / 10000000
+                })
+        
+        return output_path, timings
+
+    def generate_subtitle_file(self, timings: list, output_path: str):
+        """生成ASS字幕文件"""
+        ass_content = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{self.subtitle_config.font_path},{self.subtitle_config.font_size},&H0000FFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{self.subtitle_config.outline_width},0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+        # 生成字幕内容
+        for timing in timings:
+            start_time = self._format_time(timing["start"])
+            end_time = self._format_time(timing["end"])
+            text = timing["word"]
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+            
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(ass_content)
+        
+        return output_path
+
+    def _format_time(self, seconds: float) -> str:
+        """将秒数转换为ASS时间格式 (H:MM:SS.cc)"""
+        hours = int(seconds / 3600)
+        minutes = int((seconds % 3600) / 60)
+        seconds = seconds % 60
+        centiseconds = int((seconds % 1) * 100)
+        seconds = int(seconds)
+        return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+
     def process_video(self, video_path: str, text: str, output_path: str) -> str:
         """处理视频：生成配音并合并
         
@@ -103,3 +155,36 @@ class AudioProcessor:
         finally:
             if os.path.exists(temp_audio):
                 os.remove(temp_audio)
+
+    def process_video_with_subtitle(self, video_path: str, text: str, output_path: str) -> str:
+        """处理视频：生成配音、字幕并合并"""
+        temp_audio = "temp_voice.mp3"
+        temp_subtitle = "temp_subtitle.ass"
+        
+        try:
+            # 生成语音和时间轴信息
+            audio_path, timings = asyncio.run(self.generate_voice_with_timing(text, temp_audio))
+            
+            # 生成字幕文件
+            subtitle_path = self.generate_subtitle_file(timings, temp_subtitle)
+            
+            # 合并视频、音频和字幕
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_path,
+                "-vf", f"ass={subtitle_path}",
+                "-map", "0:v",
+                "-map", "1:a",
+                "-c:a", "aac",
+                output_path
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+            return output_path
+            
+        finally:
+            # 清理临时文件
+            for temp_file in [temp_audio, temp_subtitle]:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
