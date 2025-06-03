@@ -83,23 +83,50 @@ class AudioProcessor:
         """生成语音文件并返回时间轴信息"""
         communicate = edge_tts.Communicate(text, self.audio_config.voice_name, rate=self.audio_config.voice_rate)
         
-        # 先保存音频
+        # 保存音频
         await communicate.save(output_path)
         
         # 创建新的通信实例来获取时间轴信息
         communicate = edge_tts.Communicate(text, self.audio_config.voice_name, rate=self.audio_config.voice_rate)
         
         # 收集时间轴信息
-        timings = []
+        word_timings = []
+        current_sentence = []
+        sentences = self._split_into_sentences(text)
+        print(f"分割后的句子: {sentences}")
+        current_sentence_text = ""
+        
         async for event in communicate.stream():
             if event["type"] == "WordBoundary":
-                timings.append({
+                word_timings.append({
                     "word": event["text"],
-                    "start": event["offset"] / 10000000,  # 转换为秒
+                    "start": event["offset"] / 10000000,
                     "end": (event["offset"] + event["duration"]) / 10000000
                 })
+                
+        # 将单词时间轴信息合并为句子时间轴
+        sentence_timings = []
+        word_index = 0
         
-        return output_path, timings
+        for sentence in sentences:
+            sentence_words = sentence.split()
+            if not sentence_words:
+                continue
+                
+            start_time = word_timings[word_index]["start"]
+            while word_index < len(word_timings) and len(sentence_words) > 0:
+                word_index += 1
+                sentence_words.pop(0)
+                
+            end_time = word_timings[min(word_index - 1, len(word_timings) - 1)]["end"]
+            
+            sentence_timings.append({
+                "word": sentence,
+                "start": start_time,
+                "end": end_time
+            })
+        
+        return output_path, sentence_timings
 
     def generate_subtitle_file(self, timings: list, output_path: str):
         """生成ASS字幕文件"""
@@ -188,3 +215,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for temp_file in [temp_audio, temp_subtitle]:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
+
+    def _split_into_sentences(self, text: str) -> list[str]:
+        """将文本分割为句子
+    
+        Args:
+            text: 输入文本
+    
+        Returns:
+            list[str]: 句子列表
+        """
+        import re
+        # 在标点符号处分割文本
+        sentences = re.split(r'([,.!?])', text)
+        # 将标点符号附加到前一个句子
+        result = []
+        i = 0
+        while i < len(sentences):
+            if i + 1 < len(sentences) and sentences[i+1].strip() in [',', '.', '!', '?']:
+                # 如果下一个元素是标点符号，将其与当前句子合并
+                result.append(sentences[i].strip() + sentences[i+1])
+                i += 2
+            else:
+                # 处理最后一个没有标点符号的句子
+                current = sentences[i].strip()
+                if current:
+                    result.append(current)
+                i += 1
+            
+        return [s.strip() for s in result if s.strip()]
