@@ -17,4 +17,12 @@ class AudioConfig:
     voice_name: str = "en-US-JennyNeural"
     voice_rate: str = "+0%"
     volume: float = 1.0
-    output_format: str = "mp3"    
+    output_format: str = "mp3"
+
+@dataclass
+class BackgroundMusicConfig:
+    """背景音乐配置类"""
+    music_path: str = "resource/songs/output002.mp3"
+    volume: float = 0.7  # 背景音乐音量，范围0-1
+    output_format: str = "mp3"
+    temp_filename: str = "temp_background.mp3"  # 临时文件名

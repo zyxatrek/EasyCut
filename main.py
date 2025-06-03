@@ -1,11 +1,11 @@
 from add_sounds import AudioConfig, AudioProcessor
 from video_concatenate import VideoConCatProcessor
 from background_music import BackgroundMusicProcessor
-from config import SubtitleConfig
+from config import AudioConfig, SubtitleConfig, BackgroundMusicConfig
 import os
 
 def main():
-    # 初始化处理器
+    # 初始化处理器和配置
     audio_processor = AudioProcessor()
     video_processor = VideoConCatProcessor()
     bgm_processor = BackgroundMusicProcessor()
@@ -64,13 +64,10 @@ def main():
             print(f"视频拼接成功! 最终文件: {result}")
             
             # 添加背景音乐
-            
             final_output_with_bgm = "final_output_with_bgm.mp4"
             result = bgm_processor.add_background_music(
                 video_path=final_output,
-                music_path="resource/songs/output001.mp3",
-                output_path=final_output_with_bgm,
-                music_volume=0.7
+                output_path=final_output_with_bgm
             )
             print(f"背景音乐添加成功! 最终文件: {result}")
             

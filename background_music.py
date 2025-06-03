@@ -2,19 +2,20 @@ import subprocess
 from typing import Optional
 from pydub import AudioSegment
 import os
+from config import BackgroundMusicConfig
 
 class BackgroundMusicProcessor:
     """背景音乐处理器类"""
     
-    def add_background_music(self, video_path: str, music_path: str, output_path: str, 
-                           music_volume: float = 0.3) -> str:
+    def __init__(self):
+        self.config = BackgroundMusicConfig()
+    
+    def add_background_music(self, video_path: str, output_path: str) -> str:
         """为视频添加背景音乐
         
         Args:
             video_path: 输入视频路径
-            music_path: 背景音乐路径
             output_path: 输出视频路径
-            music_volume: 背景音乐音量，范围0-1，默认0.3
             
         Returns:
             str: 输出视频路径
@@ -27,14 +28,18 @@ class BackgroundMusicProcessor:
             ]).decode().strip())
             
             # 处理背景音乐
-            temp_audio = "temp_background.mp3"
-            self._process_background_music(music_path, temp_audio, video_duration, music_volume)
+            self._process_background_music(
+                self.config.music_path, 
+                self.config.temp_filename, 
+                video_duration, 
+                self.config.volume
+            )
             
             # 合并视频和背景音乐
             cmd = [
                 'ffmpeg', '-y',
                 '-i', video_path,
-                '-i', temp_audio,
+                '-i', self.config.temp_filename,
                 '-filter_complex', '[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0',
                 '-c:v', 'copy',
                 output_path
@@ -43,8 +48,8 @@ class BackgroundMusicProcessor:
             subprocess.run(cmd, check=True, capture_output=True)
             
             # 清理临时文件
-            if os.path.exists(temp_audio):
-                os.remove(temp_audio)
+            if os.path.exists(self.config.temp_filename):
+                os.remove(self.config.temp_filename)
                 
             return output_path
             
@@ -86,9 +91,7 @@ def test_background_music_processor():
     try:
         result = processor.add_background_music(
             video_path=test_video,
-            music_path=test_music,
             output_path=test_output,
-            music_volume=0.3
         )
         print(f"测试成功! 输出文件: {result}")
         return True
