@@ -93,7 +93,7 @@ class AudioProcessor:
         word_timings = []
         current_sentence = []
         sentences = self._split_into_sentences(text)
-        print(f"字幕对齐: {sentences}")
+        print(f"处理视频字幕: {sentences}")
         current_sentence_text = ""
         
         async for event in communicate.stream():
