@@ -3,8 +3,12 @@ from video_concatenate import VideoConCatProcessor
 from background_music import BackgroundMusicProcessor
 from config import AudioConfig, SubtitleConfig, BackgroundMusicConfig
 import os
+import time
 
 def main():
+    # 添加开始时间计数
+    start_time = time.time()
+    
     # 初始化处理器和配置
     audio_processor = AudioProcessor()
     video_processor = VideoConCatProcessor()
@@ -41,7 +45,7 @@ def main():
         # 处理每个视频
         for i, video_data in enumerate(input_videos, 1):
             output_video = f"output{i}.mp4"
-            print(f"正在处理视频 {i}/5: {video_data['video']}")
+            print(f"🤺正在处理视频 {i}/5: {video_data['video']}")
             
             try:
                 # 为每个视频添加字幕和配音
@@ -51,17 +55,20 @@ def main():
                     output_path=output_video
                 )
                 processed_videos.append(result)
-                print(f"视频 {i} 处理成功!")
+                elapsed_time = time.time() - start_time
+                print(f"⛳️视频 {i} 处理成功! 此时已耗时{elapsed_time:.2f}秒")
                 
             except Exception as e:
-                print(f"处理视频 {i} 失败: {str(e)}")
+                elapsed_time = time.time() - start_time
+                print(f"🎱处理视频 {i} 失败: {str(e)} 此时已耗时{elapsed_time:.2f}秒")
                 continue
         
         # 拼接所有处理好的视频
         if processed_videos:
             final_output = "final_output.mp4"
             result = video_processor.concat_videos(processed_videos, final_output)
-            print(f"视频拼接成功! 最终文件: {result}")
+            elapsed_time = time.time() - start_time
+            print(f"🏅视频拼接成功! 最终文件: {result} 此时已耗时{elapsed_time:.2f}秒")
             
             # 添加背景音乐
             final_output_with_bgm = "final_output_with_bgm.mp4"
@@ -69,17 +76,22 @@ def main():
                 video_path=final_output,
                 output_path=final_output_with_bgm
             )
-            print(f"背景音乐添加成功! 最终文件: {result}")
+            elapsed_time = time.time() - start_time
+            print(f"🎖背景音乐添加成功! 最终文件: {result} 此时已耗时{elapsed_time:.2f}秒")
             
             # 清理中间文件
             for video in processed_videos + [final_output]:
                 if os.path.exists(video):
                     os.remove(video)
+            elapsed_time = time.time() - start_time
+            print(f"🎯清理完成! 总耗时{elapsed_time:.2f}秒")
         else:
-            print("没有成功处理的视频可供拼接")
+            elapsed_time = time.time() - start_time
+            print(f"🎲没有成功处理的视频可供拼接 总耗时{elapsed_time:.2f}秒")
             
     except Exception as e:
-        print(f"处理失败: {str(e)}")
+        elapsed_time = time.time() - start_time
+        print(f"🥁处理失败: {str(e)} 总耗时{elapsed_time:.2f}秒")
         import traceback
         print(traceback.format_exc())
 
