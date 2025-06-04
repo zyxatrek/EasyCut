@@ -85,7 +85,6 @@ def test_background_music_processor():
     
     # 测试视频路径
     test_video = "final_output.mp4"
-    test_music = "resource/songs/output001.mp3"
     test_output = "test_output_with_bgm.mp4"
     
     try:
